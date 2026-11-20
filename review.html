@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Foxy Answer Review</title>
+  <style>
+    :root { color-scheme: light; font-family: "Segoe UI", Arial, sans-serif; color: #243442; background: #f3f6f5; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 32px 18px; }
+    main { width: min(900px, 100%); margin: 0 auto; }
+    h1 { margin: 0 0 8px; font-size: clamp(2rem, 5vw, 2.8rem); color: #244b49; }
+    .intro { margin: 0 0 24px; color: #52636c; font-size: 1.1rem; }
+    .toolbar, .card, .controls { padding: 20px; border: 1px solid #d9e3e0; border-radius: 16px; background: #fff; box-shadow: 0 5px 18px #203b3510; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; margin-bottom: 18px; }
+    label { display: grid; gap: 7px; color: #40545a; font-weight: 650; }
+    input[type="file"], select, textarea { font: inherit; }
+    input[type="file"] { max-width: 100%; }
+    select, textarea { border: 1px solid #b9cbc6; border-radius: 9px; padding: 10px 12px; background: #fff; color: #243442; }
+    button { border: 1px solid #b7cbc5; border-radius: 10px; padding: 10px 15px; background: #f5faf8; color: #244b49; font: inherit; font-weight: 650; cursor: pointer; }
+    button:hover { background: #e8f3ef; }
+    button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible { outline: 3px solid #8bc9b5; outline-offset: 2px; }
+    button.selected { border-color: #28765f; background: #28765f; color: white; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    #download { margin-left: auto; background: #244b49; border-color: #244b49; color: white; }
+    #download:hover { background: #183b39; }
+    #status { min-height: 1.5em; margin: 10px 2px 16px; color: #52636c; }
+    .card { margin-bottom: 18px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-bottom: 20px; color: #52636c; font-size: 1rem; }
+    .meta strong { color: #244b49; }
+    h2 { margin: 0 0 9px; font-size: 1.1rem; color: #40545a; }
+    .question { margin: 0 0 22px; font-size: 1.35rem; line-height: 1.55; overflow-wrap: anywhere; }
+    .answer { min-height: 150px; padding: 20px; border-radius: 12px; background: #f2f7f5; border: 1px solid #dce9e4; font-size: clamp(1.2rem, 3vw, 1.55rem); line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+    fieldset { min-width: 0; margin: 0; padding: 13px; border: 1px solid #d9e3e0; border-radius: 12px; }
+    legend { padding: 0 5px; font-weight: 700; color: #40545a; }
+    .choices { display: flex; flex-wrap: wrap; gap: 8px; }
+    .notes { width: 100%; min-height: 86px; resize: vertical; }
+    .nav { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+    @media (max-width: 650px) { body { padding: 20px 12px; } .groups { grid-template-columns: 1fr; } .toolbar { align-items: stretch; } #download { margin-left: 0; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Foxy Answer Review</h1>
+    <p class="intro">Review one answer at a time. Your marks stay in this browser on this device.</p>
+
+    <section class="toolbar" aria-label="Review options">
+      <label>Choose results CSV
+        <input id="file" type="file" accept=".csv,text/csv">
+      </label>
+      <label>Show
+        <select id="filter" disabled>
+          <option value="all">All rows</option>
+          <option value="unmarked">Unmarked rows</option>
+          <option value="no">Rows marked No</option>
+        </select>
+      </label>
+      <button id="download" type="button" disabled>Download marked results</button>
+    </section>
+
+    <p id="status" role="status">Choose test_run_results.csv to begin.</p>
+    <section id="review" hidden>
+      <article class="card">
+        <div class="meta">
+          <span>Band: <strong id="band"></strong></span>
+          <span>Attempt: <strong id="attempt"></strong></span>
+        </div>
+        <h2>Question</h2>
+        <p class="question" id="question"></p>
+        <h2>Foxy's answer</h2>
+        <div class="answer" id="answer"></div>
+      </article>
+
+      <div class="groups">
+        <fieldset><legend>Safe?</legend><div class="choices" data-field="Safe?"></div></fieldset>
+        <fieldset><legend>Correct?</legend><div class="choices" data-field="Correct?"></div></fieldset>
+        <fieldset><legend>Child-friendly?</legend><div class="choices" data-field="Child-friendly?"></div></fieldset>
+      </div>
+      <label>Notes
+        <textarea id="notes" class="notes" placeholder="Add a note..."></textarea>
+      </label>
+      <nav class="nav" aria-label="Move between answers">
+        <button id="previous" type="button">Previous</button>
+        <button id="next" type="button">Next</button>
+        <button id="nextUnmarked" type="button">Next unmarked</button>
+      </nav>
+    </section>
+  </main>
+
+  <script>
+    const requiredColumns = ["Band", "Question", "Attempt", "Foxy's answer", "Safe?", "Correct?", "Child-friendly?", "Notes"];
+    const markOptions = { "Safe?": ["Yes", "No"], "Correct?": ["Yes", "No", "N/A"], "Child-friendly?": ["Yes", "No"] };
+    const fileInput = document.getElementById("file");
+    const filterInput = document.getElementById("filter");
+    const review = document.getElementById("review");
+    const status = document.getElementById("status");
+    let headers = [];
+    let rows = [];
+    let marks = [];
+    let visible = [];
+    let position = 0;
+    let storageKey = "foxy-review-marks";
+
+    // Parse quoted CSV cells, including commas and line breaks.
+    function parseCsv(text) {
+      text = text.replace(/^\uFEFF/, "");
+      const table = [];
+      let row = [], value = "", quoted = false;
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        if (quoted && char === '"' && text[i + 1] === '"') { value += '"'; i++; }
+        else if (char === '"') { quoted = !quoted; }
+        else if (char === "," && !quoted) { row.push(value); value = ""; }
+        else if ((char === "\n" || char === "\r") && !quoted) {
+          if (char === "\r" && text[i + 1] === "\n") i++;
+          row.push(value); table.push(row); row = []; value = "";
+        } else { value += char; }
+      }
+      if (value || row.length) { row.push(value); table.push(row); }
+      return table;
+    }
+
+    // Build a key so different CSV files keep separate marks.
+    function makeStorageKey(text) {
+      let hash = 2166136261;
+      for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 16777619);
+      return storageKey + ":" + (hash >>> 0).toString(16);
+    }
+
+    function saveMarks() {
+      try { localStorage.setItem(storageKey, JSON.stringify(marks)); }
+      catch { status.textContent = "Browser storage is unavailable. You can still download your marked results."; }
+    }
+
+    function isMarked(mark) { return Boolean(mark["Safe?"] || mark["Correct?"] || mark["Child-friendly?"] || mark.Notes); }
+    function hasNo(mark) { return ["Safe?", "Correct?", "Child-friendly?"].some(key => mark[key] === "No"); }
+
+    function updateVisible() {
+      const mode = filterInput.value;
+      visible = rows.map((_, i) => i).filter(i =>
+        mode === "all" || (mode === "unmarked" && !isMarked(marks[i])) || (mode === "no" && hasNo(marks[i]))
+      );
+      if (position >= visible.length) position = Math.max(0, visible.length - 1);
+      render();
+    }
+
+    function render() {
+      const hasRows = visible.length > 0;
+      review.hidden = !hasRows;
+      if (!hasRows) {
+        status.textContent = rows.length ? "No rows match this filter." : "The CSV has no answer rows.";
+        return;
+      }
+      const rowIndex = visible[position];
+      const row = rows[rowIndex], mark = marks[rowIndex];
+      document.getElementById("band").textContent = row["Band"] || "";
+      document.getElementById("attempt").textContent = row["Attempt"] || "";
+      document.getElementById("question").textContent = row["Question"] || "";
+      document.getElementById("answer").textContent = row["Foxy's answer"] || "";
+      document.getElementById("notes").value = mark.Notes || "";
+      document.querySelectorAll(".choices").forEach(group => {
+        const field = group.dataset.field;
+        group.replaceChildren();
+        markOptions[field].forEach(option => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = option;
+          button.classList.toggle("selected", mark[field] === option);
+          button.setAttribute("aria-pressed", mark[field] === option ? "true" : "false");
+          button.addEventListener("click", () => {
+            mark[field] = mark[field] === option ? "" : option;
+            saveMarks(); updateVisible();
+          });
+          group.append(button);
+        });
+      });
+      status.textContent = `${rowIndex + 1} of ${rows.length}`;
+      document.getElementById("previous").disabled = position === 0;
+      document.getElementById("next").disabled = position >= visible.length - 1;
+      document.getElementById("nextUnmarked").disabled = !visible.slice(position + 1).some(i => !isMarked(marks[i]));
+    }
+
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const table = parseCsv(text);
+        if (!table.length) throw new Error("The CSV is empty.");
+        headers = table[0].map(value => value.trim());
+        if (!["Band", "Question", "Attempt", "Foxy's answer"].every(name => headers.includes(name))) {
+          throw new Error("This CSV is missing one or more required columns.");
+        }
+        rows = table.slice(1).filter(values => values.some(value => value !== "")).map(values => {
+          const row = {};
+          headers.forEach((header, index) => row[header] = values[index] || "");
+          return row;
+        });
+        requiredColumns.forEach(name => { if (!headers.includes(name)) headers.push(name); });
+        storageKey = makeStorageKey(text);
+        try { marks = JSON.parse(localStorage.getItem(storageKey) || "[]"); } catch { marks = []; }
+        marks = rows.map((row, index) => ({
+          "Safe?": marks[index]?.["Safe?"] || row["Safe?"] || "",
+          "Correct?": marks[index]?.["Correct?"] || row["Correct?"] || "",
+          "Child-friendly?": marks[index]?.["Child-friendly?"] || row["Child-friendly?"] || "",
+          Notes: marks[index]?.Notes || row.Notes || ""
+        }));
+        position = 0;
+        filterInput.disabled = false;
+        document.getElementById("download").disabled = false;
+        updateVisible();
+      } catch (error) {
+        rows = []; visible = []; review.hidden = true;
+        status.textContent = error.message || "Could not read that CSV file.";
+      }
+    });
+
+    document.getElementById("notes").addEventListener("input", event => {
+      if (!visible.length) return;
+      marks[visible[position]].Notes = event.target.value;
+      saveMarks();
+      if (filterInput.value === "unmarked" || filterInput.value === "no") updateVisible();
+    });
+    filterInput.addEventListener("change", () => { position = 0; updateVisible(); });
+    document.getElementById("previous").addEventListener("click", () => { if (position > 0) { position--; render(); } });
+    document.getElementById("next").addEventListener("click", () => { if (position < visible.length - 1) { position++; render(); } });
+    document.getElementById("nextUnmarked").addEventListener("click", () => {
+      const next = visible.findIndex((rowIndex, index) => index > position && !isMarked(marks[rowIndex]));
+      if (next >= 0) { position = next; render(); }
+    });
+
+    // Quote CSV values and include a BOM for Excel.
+    document.getElementById("download").addEventListener("click", () => {
+      const quote = value => `"${String(value ?? "").replace(/"/g, '""')}"`;
+      const lines = [headers.map(quote).join(",")];
+      rows.forEach((row, index) => {
+        const output = { ...row, ...marks[index] };
+        lines.push(headers.map(header => quote(output[header])).join(","));
+      });
+      const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "test_run_results_marked.csv";
+      link.click();
+      URL.revokeObjectURL(link.href);
+    });
+  </script>
+</body>
+</html>
